@@ -8,5 +8,8 @@ class BaseExceptionError(Exception):
         return repr(self.message)
 
 
-class CustomerServiceError(BaseExceptionError):
+class TransactionServiceError(BaseExceptionError):
     """Base class for exceptions in the Customer service."""
+
+    def __init__(self, message: str = "An error occurred with the Transaction service."):
+        super().__init__(message)

@@ -1,3 +1,6 @@
+"""This module defines custom exception classes for handling various errors in the application."""
+
+
 class BaseExceptionError(Exception):
     """Base class for exceptions in this module."""
 
