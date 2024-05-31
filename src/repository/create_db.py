@@ -19,7 +19,7 @@ def init_db() -> None:
         create_database(engine.url)
     with engine.begin() as conn:
         # Creates the tables if they don't exist.
-        logger.info("Creating tables.")
+        logger.info("Creating tables if they don't exist.")
         Base.metadata.create_all(bind=conn)
     logger.info("Finished database initialization.")
 

@@ -1,18 +1,19 @@
 """Module with the endpoints for the transaction entity."""
 
 import logging
-from datetime import datetime, timezone
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, File, Path, Query, Request, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Path, Request, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, Response
 from pydantic import UUID4
 from sqlalchemy.orm import Session
 
 from src.controller.api.endpoints.base import common_query_parameters
+from src.controller.api.schemas.base import req_pagination
 from src.controller.api.schemas.error_message import ErrorMessage
-from src.controller.api.schemas.transactions import (
+from src.controller.api.schemas.transactions.get_list_filters import req_transaction_filters
+from src.controller.api.schemas.transactions.transactions import (
     DetailTransaction,
     FullDetailTransaction,
     GetListTransactions,
@@ -30,6 +31,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 CommonDeps = Annotated[dict[str, Any], Depends(common_query_parameters)]
+FiltersDeps = Annotated[
+    tuple[list[Filter], OrderBy, OrderDirection],
+    Depends(req_transaction_filters),
+]
+PaginationDeps = Annotated[tuple[int | None, int | None], Depends(req_pagination)]
 
 
 @router.post(
@@ -50,9 +56,9 @@ CommonDeps = Annotated[dict[str, Any], Depends(common_query_parameters)]
     response_class=Response,
 )
 async def post_transactions_file(
+    file: Annotated[UploadFile, File(description="File with transactions.")],
     http_request_info: CommonDeps,
     db_connection: Annotated[Session, Depends(get_db_session)],
-    file: Annotated[UploadFile, File(description="File with transactions.")],
 ) -> Response:
     """Endpoint to post the create transactions from a file."""
     logger.info("Entering...")
@@ -63,12 +69,23 @@ async def post_transactions_file(
             + "Please use application/vnd.ms-excel content-type files."
         )
         raise HTTP400BadRequestError(error_msg)
-    account_id = await TransactionService.post_transactions_file(
-        db_connection=db_connection, file=file
-    )
-    http_request_info["location_id"] = account_id
+    (
+        account_id,
+        succesful_transactions,
+        already_exist_transactions,
+    ) = await TransactionService.post_transactions_file(db_connection=db_connection, file=file)
+    data = {
+        "account_id": account_id,
+        "succesful_transactions": succesful_transactions,
+        "already_exist_transactions": already_exist_transactions,
+    }
+    http_request_info["location-id"] = account_id
     logger.info("Exiting...")
-    return Response(status_code=201, headers=http_request_info)
+    return JSONResponse(
+        content=data,
+        status_code=status.HTTP_201_CREATED,
+        headers=http_request_info,
+    )
 
 
 @router.get(
@@ -90,158 +107,56 @@ async def post_transactions_file(
     response_model=GetListTransactions,
 )
 async def get_transactions(
+    account_number: Annotated[str, Path(description="Account Number", max_length=34)],
+    filters: FiltersDeps,
+    pagination: PaginationDeps,
     http_request_info: CommonDeps,
     request: Request,
     db_connection: Annotated[Session, Depends(get_db_session)],
-    account_number: Annotated[str, Path(description="Account Number", max_length=34)],
-    concept: Annotated[
-        str | None,
-        Query(
-            description="Concept of the transaction.",
-            example="Compra Apple.com/bill, Itunes.com, Tarjeta 543719440150905 , Comision 0,00",
-        ),
-    ] = None,
-    amount: Annotated[
-        int | None,
-        Query(description="Amount of the transaction.", example="0.00"),
-    ] = None,
-    amount_start_range: Annotated[
-        int | None,
-        Query(description="Amount start range of the transaction.", example="0.00"),
-    ] = None,
-    amount_end_range: Annotated[
-        int | None,
-        Query(description="Amount end range of the transaction.", example="0.00"),
-    ] = None,
-    operation_date: Annotated[
-        str | None,
-        Query(description="Operation date of the transaction.", example="2021-07-27"),
-    ] = None,
-    operation_start_range_date: Annotated[
-        str | None,
-        Query(description="Operation start range date of the transaction.", example="2021-07-27"),
-    ] = None,
-    operation_end_range_date: Annotated[
-        str | None,
-        Query(description="Operation end range date of the transaction.", example="2021-07-27"),
-    ] = None,
-    order_by: Annotated[
-        OrderBy,
-        Query(description="Order by field. Default is operation date."),
-    ] = OrderBy.operation_original_date,
-    order_direction: Annotated[
-        OrderDirection,
-        Query(description="Order direction. Default is descending."),
-    ] = OrderDirection.DESCENDING,
-    limit: Annotated[
-        int,
-        Query(
-            description="Number of records returned per page."  # noqa: ISC003
-            + " If specified on entry, this will be the value of the query,"
-            + " otherwise it will be the value value set by default.",
-            ge=1,
-            le=100,
-        ),
-    ] = 10,
-    offset: Annotated[
-        int,
-        Query(
-            description="Record number from which you want to receive"  # noqa: ISC003
-            + " the number of records indicated in the limit."
-            + " If it is indicated at the entry, it will be the value of the query."
-            + " If it is not indicated at the input, as the query is on the first page,"
-            + " its value will be 0.",
-            ge=0,
-            le=100,
-        ),
-    ] = 0,
 ) -> JSONResponse:
     """List of transactions."""
     logger.info("Entering...")
-    if amount and (amount_start_range or amount_end_range):
-        error_msg = "You can't use amount and amount range at the same time."
-        raise HTTP400BadRequestError(error_msg)
-    if (amount_start_range and not amount_end_range) or (
-        not amount_start_range and amount_end_range
-    ):
-        error_msg = "You must use both amount range fields."
-        raise HTTP400BadRequestError(error_msg)
+    logger.debug("Filters: %s", filters[0])
 
-    if operation_date and (operation_start_range_date or operation_end_range_date):
-        error_msg = "You can't use operation date and operation date range at the same time."
-        raise HTTP400BadRequestError(error_msg)
-    if (operation_start_range_date and not operation_end_range_date) or (
-        not operation_start_range_date and operation_end_range_date
-    ):
-        error_msg = "You must use both operation date range fields."
-        raise HTTP400BadRequestError(error_msg)
-
-    filters: list[Filter] = []
-    if concept:
-        filters.append(Filter(field="concept", operator="contains", value=concept))
-    if amount:
-        filters.append(Filter(field="amount", operator="eq", value=amount))
-    if amount_start_range:
-        filters.append(Filter(field="amount", operator="gte", value=amount_start_range))
-    if amount_end_range:
-        filters.append(Filter(field="amount", operator="lte", value=amount_end_range))
-    if operation_date:
-        if (
-            operation_date
-            and not datetime.strptime(operation_date, "%Y-%m-%d")
-            .replace(tzinfo=timezone.utc)
-            .isoformat()
-        ):
-            error_msg = "Invalid operation date format. Please use YYYY-MM-DD."
-            raise HTTP400BadRequestError(error_msg)
-        filters.append(Filter(field="operation_original_date", operator="eq", value=operation_date))
-    if operation_start_range_date:
-        if (
-            operation_date
-            and not datetime.strptime(operation_date, "%Y-%m-%d")
-            .replace(tzinfo=timezone.utc)
-            .isoformat()
-        ):
-            error_msg = "Invalid operation date format. Please use YYYY-MM-DD."
-            raise HTTP400BadRequestError(error_msg)
-        filters.append(
-            Filter(
-                field="operation_original_date", operator="gte", value=operation_start_range_date
-            )
-        )
-    if operation_end_range_date:
-        if (
-            operation_date
-            and not datetime.strptime(operation_date, "%Y-%m-%d")
-            .replace(tzinfo=timezone.utc)
-            .isoformat()
-        ):
-            error_msg = "Invalid operation date format. Please use YYYY-MM-DD."
-            raise HTTP400BadRequestError(error_msg)
-        filters.append(
-            Filter(field="operation_original_date", operator="lte", value=operation_end_range_date)
-        )
-    logger.debug("Filters: %s", filters)
-
-    transactions, count = TransactionService.get_transactions_list(
+    limit = pagination[0]
+    offset = pagination[1]
+    transactions, count, from_date, to_date, statistics = TransactionService.get_transactions_list(
         db_connection=db_connection,
         account_number=account_number,
         limit=limit,
         offset=offset,
-        filters=filters,
-        order_by=order_by,
-        order_direction=order_direction,
+        statistics=filters[0],
+        filters=filters[1],
+        order_by=filters[2],
+        order_direction=filters[3],
     )
 
     base_url = f"{request.url.scheme}://{request.url.netloc}"
     path = request.scope.get("path", "")
     url_without_query_params = base_url + path
-    pagination = Pagination().get_pagination(offset, limit, count, url_without_query_params)
+    if limit:
+        if not offset:
+            offset = 0
+        api_pagination = Pagination().get_pagination(
+            offset=offset, limit=limit, no_elements=count, url=url_without_query_params
+        )
+    else:
+        api_pagination = None
 
-    output = GetListTransactions(data=transactions, pagination=pagination)
+    output = GetListTransactions(
+        from_date=from_date,
+        to_date=to_date,
+        statistics=statistics,
+        transactions=transactions,
+        pagination=api_pagination,
+    )
     response_data = jsonable_encoder(output.model_dump())
     logger.info("Exiting...")
-    return JSONResponse(content=response_data, status_code=200, headers=http_request_info)
+    return JSONResponse(
+        content=response_data,
+        status_code=status.HTTP_200_OK,
+        headers=http_request_info,
+    )
 
 
 @router.get(
@@ -278,7 +193,11 @@ async def get_transaction_id(
 
     response_data = jsonable_encoder(output.model_dump())
     logger.info("Exiting...")
-    return JSONResponse(content=response_data, status_code=200, headers=http_request_info)
+    return JSONResponse(
+        content=response_data,
+        status_code=status.HTTP_200_OK,
+        headers=http_request_info,
+    )
 
 
 @router.post(
@@ -300,6 +219,7 @@ async def get_transaction_id(
 )
 async def post_transaction(
     http_request_info: CommonDeps,
+    account_number: Annotated[str, Path(description="Account Number", max_length=34)],
     db_connection: Annotated[Session, Depends(get_db_session)],
     body: Annotated[DetailTransaction, Body(description="Transaction data.")],
 ) -> Response:
@@ -308,11 +228,12 @@ async def post_transaction(
     transaction_id: UUID4 = TransactionService.post_transaction(
         db_connection=db_connection,
         data=body,
+        account_number=account_number,
     )
 
-    http_request_info["location_id"] = str(transaction_id)
+    http_request_info["location-id"] = str(transaction_id)
     logger.info("Exiting...")
-    return Response(status_code=200, headers=http_request_info)
+    return Response(status_code=status.HTTP_201_CREATED, headers=http_request_info)
 
 
 @router.put(
@@ -333,8 +254,8 @@ async def post_transaction(
     response_model=None,
 )
 async def put_transaction(
-    transaction_id: Annotated[UUID4, Path(description="Id of a specific transaction.")],
     account_number: Annotated[str, Path(description="Account Number", max_length=34)],
+    transaction_id: Annotated[UUID4, Path(description="Id of a specific transaction.")],
     http_request_info: CommonDeps,
     db_connection: Annotated[Session, Depends(get_db_session)],
     body: Annotated[DetailTransaction, Body(description="Transaction data.")],
@@ -348,7 +269,7 @@ async def put_transaction(
         data=body,
     )
     logger.info("Exiting...")
-    return Response(status_code=200, headers=http_request_info)
+    return Response(status_code=status.HTTP_204_NO_CONTENT, headers=http_request_info)
 
 
 @router.delete(
@@ -369,8 +290,8 @@ async def put_transaction(
     response_model=None,
 )
 async def delete_transaction_id(
-    transaction_id: Annotated[UUID4, Path(description="Id of a specific transaction.")],
     account_number: Annotated[str, Path(description="Account Number", max_length=34)],
+    transaction_id: Annotated[UUID4, Path(description="Id of a specific transaction.")],
     http_request_info: CommonDeps,
     db_connection: Annotated[Session, Depends(get_db_session)],
 ) -> Response:
@@ -380,4 +301,4 @@ async def delete_transaction_id(
         db_connection=db_connection, transaction_id=transaction_id, account_number=account_number
     )
     logger.info("Exiting...")
-    return Response(status_code=204, headers=http_request_info)
+    return Response(status_code=status.HTTP_204_NO_CONTENT, headers=http_request_info)

@@ -5,7 +5,7 @@ for managing transactions and their associated data.
 
 from datetime import date
 
-from sqlalchemy import UUID, Date, Float, ForeignKey, Integer, String
+from sqlalchemy import UUID, Date, Float, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.repository.models.base import BaseTimestamps
@@ -23,6 +23,9 @@ class Account(BaseTimestamps):
         lazy="subquery",
     )
 
+    def __str__(self) -> str:
+        return f"{self.account_number} - {self.account_holder}"
+
 
 class Transaction(BaseTimestamps):
     """Represents a transaction entity in the database."""
@@ -36,3 +39,18 @@ class Transaction(BaseTimestamps):
     account: Mapped["Account"] = relationship(
         back_populates="transactions",
     )
+
+    # Ensure that the combination of the following fields is unique
+    __table_args__ = (
+        UniqueConstraint(
+            "operation_original_date",
+            "operation_effective_date",
+            "concept",
+            "amount",
+            "balance",
+            name="uq__op_orig_date__op_eff_date__concept__amt__bal",
+        ),
+    )
+
+    def __str__(self) -> str:
+        return f"{self.id}"
