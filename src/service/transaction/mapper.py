@@ -8,9 +8,14 @@ for insertion into the DB.
 import logging
 from datetime import date
 
+import pandas as pd
+from pandas import DataFrame
 from pydantic import UUID4
 
-from src.controller.api.schemas.transactions import DetailTransaction, FullDetailTransaction
+from src.controller.api.schemas.transactions.transactions import (
+    DetailTransaction,
+    FullDetailTransaction,
+)
 from src.repository.models.transactions import Transaction
 
 # from src.controller.api.schemas.transactions import FullDetailTransaction, GetListTransactions
@@ -19,7 +24,7 @@ from src.repository.models.transactions import Transaction
 logger = logging.getLogger(__name__)
 
 
-def map_transaction_from_db(transaction: Transaction) -> FullDetailTransaction:
+def map_api_transaction_from_db(transaction: Transaction) -> FullDetailTransaction:
     """Maps a transaction model from the database to a Pydantic schema.
 
     Args:
@@ -28,7 +33,6 @@ def map_transaction_from_db(transaction: Transaction) -> FullDetailTransaction:
     Returns:
         FullDetailTransaction: The Pydantic schema representing the transaction.
     """
-    logger.debug("Mapping transaction from database to schema")
     return FullDetailTransaction(
         transaction_id=str(transaction.id),
         amount=transaction.amount,
@@ -41,7 +45,7 @@ def map_transaction_from_db(transaction: Transaction) -> FullDetailTransaction:
     )
 
 
-def map_transaction_from_api(data: DetailTransaction, account_id: UUID4) -> Transaction:
+def map_db_transaction_from_api(data: DetailTransaction, account_id: UUID4) -> Transaction:
     """Maps a transaction schema from the API to a database model.
 
     Args:
@@ -51,7 +55,6 @@ def map_transaction_from_api(data: DetailTransaction, account_id: UUID4) -> Tran
     Returns:
         Transaction: The database model representing the transaction.
     """
-    logger.debug("Mapping transaction from schema to database")
     operation_effective_date: date = date.fromisoformat(data.operation_effective_date)
     operation_original_date: date = date.fromisoformat(data.operation_original_date)
     return Transaction(
@@ -62,3 +65,33 @@ def map_transaction_from_api(data: DetailTransaction, account_id: UUID4) -> Tran
         concept=data.concept,
         account_id=account_id,
     )
+
+
+def map_dataframe_from_db(transactions: list[Transaction]) -> DataFrame:
+    """Maps a list of transaction models from the database to a DataFrame.
+
+    Args:
+        transactions (list[Transaction]): The list of transaction models to map.
+
+    Returns:
+        DataFrame: The DataFrame representing the transactions.
+    """
+    dataframe = pd.DataFrame(
+        [
+            {
+                "operation_original_date": t.operation_original_date,
+                "operation_effective_date": t.operation_effective_date,
+                "concept": t.concept,
+                "amount": t.amount,
+                "balance": t.balance,
+                "account_id": t.account_id,
+            }
+            for t in transactions
+        ]
+    )
+    # Ensure columns are correctly typed
+    dataframe["operation_original_date"] = pd.to_datetime(dataframe["operation_original_date"])
+    dataframe["operation_effective_date"] = pd.to_datetime(dataframe["operation_effective_date"])
+    dataframe["amount"] = dataframe["amount"].astype(float)
+    dataframe["balance"] = dataframe["balance"].astype(float)
+    return dataframe

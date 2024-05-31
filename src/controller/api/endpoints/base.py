@@ -26,4 +26,4 @@ async def common_query_parameters(
     Returns:
         dict[str, Any]: A dictionary with the common query parameters.
     """
-    return {"accept_language": accept_language}
+    return {"accept-language": accept_language}
