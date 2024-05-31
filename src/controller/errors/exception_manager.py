@@ -14,6 +14,7 @@ import os
 import traceback
 from typing import TYPE_CHECKING
 
+from asgi_correlation_id import correlation_id
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -21,6 +22,7 @@ from sqlalchemy.exc import IntegrityError, NoResultFound, OperationalError, Prog
 
 from src.controller.errors import exceptions
 from src.controller.errors.error_responses import ERROR_RESPONSES
+from src.repository.exceptions import ElementNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -49,12 +51,8 @@ def _manage_exception(request: Request, exc: Exception, code: int) -> JSONRespon
         JSONResponse: Exception response
     """
     _log_exception(request, exc)
-    if x_request_id := request.headers.get("x-request-id"):
-        headers = {"X-Request-ID": str(x_request_id)}
-    else:
-        headers = None
-
     error: ErrorMessage | None = ERROR_RESPONSES.get(code)
+    headers = {"X-Request-ID": correlation_id.get() or ""}
     if not error:
         return JSONResponse(status_code=code, content=None, headers=headers)
 
@@ -63,7 +61,9 @@ def _manage_exception(request: Request, exc: Exception, code: int) -> JSONRespon
             if error and error.messages and len(error.messages) > 0:
                 error.messages[0].description = str(exc)
     return JSONResponse(
-        status_code=code, content=error.model_dump() if error else None, headers=headers
+        status_code=code,
+        content=error.model_dump() if error else None,
+        headers=headers,
     )
 
 
@@ -100,6 +100,7 @@ def manage_api_exceptions(app: FastAPI) -> None:  # noqa: C901
         return _manage_exception(request, exc, code)
 
     @app.exception_handler(NoResultFound)
+    @app.exception_handler(ElementNotFoundError)
     @app.exception_handler(exceptions.HTTP404NotFoundError)
     async def not_found_handler(
         request: Request,

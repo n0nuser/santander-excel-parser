@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 def init_db() -> None:
     """Initialize the database."""
     # Creates database if it doesn't exist.
+    logger.info("Initiating database...")
     if not database_exists(engine.url):
         logger.info("Creating database.")
         create_database(engine.url)
@@ -20,5 +21,6 @@ def init_db() -> None:
         # Creates the tables if they don't exist.
         logger.info("Creating tables.")
         Base.metadata.create_all(bind=conn)
+    logger.info("Finished database initialization.")
 
     # Create here the initial data to populate the database.
