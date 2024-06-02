@@ -70,16 +70,16 @@ async def post_transactions_file(
         )
         raise HTTP400BadRequestError(error_msg)
     (
-        account_id,
+        account_number,
         succesful_transactions,
         already_exist_transactions,
     ) = await TransactionService.post_transactions_file(db_connection=db_connection, file=file)
     data = {
-        "account_id": account_id,
+        "account_number": account_number,
         "succesful_transactions": succesful_transactions,
         "already_exist_transactions": already_exist_transactions,
     }
-    http_request_info["location-id"] = account_id
+    http_request_info["location-id"] = account_number
     logger.info("Exiting...")
     return JSONResponse(
         content=data,

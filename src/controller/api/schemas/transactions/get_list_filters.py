@@ -114,7 +114,9 @@ def req_transaction_filters(
         field = "operation_original_date"
         transaction_filters.append(check_date_format(operation_date, "eq", field))
     if operation_start_range_date:
-        transaction_filters.append(check_date_format(operation_date, "gte", field))
+        field = "operation_original_date"
+        transaction_filters.append(check_date_format(operation_start_range_date, "gte", field))
     if operation_end_range_date:
-        transaction_filters.append(check_date_format(operation_date, "lte", field))
+        field = "operation_original_date"
+        transaction_filters.append(check_date_format(operation_end_range_date, "lte", field))
     return stastistics, transaction_filters, order_by, order_direction
