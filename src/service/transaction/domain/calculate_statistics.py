@@ -8,6 +8,7 @@ from src.controller.api.schemas.transactions.statistics import (
     BasicStatistics,
     TimeBasedAnalysis,
     TransactionModel,
+    TransactionStatistics,
 )
 
 
@@ -25,7 +26,25 @@ def calculate_statistics(transactions_df: DataFrame) -> BankTransactionStatistic
     total_deposited = transactions_df[transactions_df["amount"] > 0]["amount"].sum()
     total_withdrawn = transactions_df[transactions_df["amount"] < 0]["amount"].sum()
     average_transaction_amount = transactions_df["amount"].mean()
-    transactions_per_concept = transactions_df["concept"].value_counts().to_dict()
+    transactions_per_concept_df = (
+        transactions_df.groupby("concept")
+        .agg(num_transactions=("amount", "size"), total_balance=("amount", "sum"))
+        .reset_index()
+    )
+    transactions_per_concept_dict = (
+        transactions_per_concept_df.sort_values(by="total_balance", ascending=False)
+        .set_index("concept")
+        .T.apply(lambda x: [x["num_transactions"], x["total_balance"]])
+        .to_dict()
+    )
+    transactions_per_concept_model = [
+        TransactionStatistics(
+            concept=key,
+            num_transactions=value.get("num_transactions"),
+            total_balance=value.get("total_balance"),
+        )
+        for key, value in transactions_per_concept_dict.items()
+    ]
 
     basic_statistics = BasicStatistics(
         total_transactions=total_transactions,
@@ -33,7 +52,7 @@ def calculate_statistics(transactions_df: DataFrame) -> BankTransactionStatistic
         total_withdrawn=total_withdrawn,
         total_balance=total_deposited + total_withdrawn,
         average_transaction_amount=average_transaction_amount,
-        transactions_per_concept=transactions_per_concept,
+        transactions_per_concept=transactions_per_concept_model,
     )
 
     # Time-Based Analysis
@@ -98,7 +117,7 @@ def calculate_statistics(transactions_df: DataFrame) -> BankTransactionStatistic
         .ffill()
         .reset_index()
     )
-    daily_ending_balance_dict = daily_ending_balance_df.pivot(
+    daily_ending_balance_dict = daily_ending_balance_df.pivot_table(
         index="operation_effective_date", columns="account_id", values="balance"
     ).to_dict()
 
