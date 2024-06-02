@@ -15,34 +15,28 @@ logger = logging.getLogger(__name__)
 
 def transaction_list_details(
     db_data: list[Transaction | None],
-) -> tuple[list[FullDetailTransaction], float, float, str, str]:
+) -> tuple[list[FullDetailTransaction], str, str]:
     """Extracts the transaction details from the database data.
 
     Args:
         db_data (list[Transaction]): The list of transactions from the database.
 
     Returns:
-        tuple[list[FullDetailTransaction], float, float, str, str]: The list of transactions,
-            the total income, the total expenses, the start date, and the end date in isoformat.
+        tuple[list[FullDetailTransaction], str, str]: The list of transactions,
+            the start date, and the end date in isoformat.
     """
     mapped_data = []
-    income = 0.0
-    expenses = 0.0
     from_date: date | None = None
     to_date: date | None = None
     for element in db_data:
-        if element.operation_original_date:
-            if not from_date or element.operation_original_date < from_date:
-                from_date = element.operation_original_date
-                from_date_str = from_date.isoformat()
-            if not to_date or element.operation_original_date > to_date:
-                to_date = element.operation_original_date
-                to_date_str = to_date.isoformat()
         if element:
             api_transaction = map_api_transaction_from_db(element)
             mapped_data.append(api_transaction)
-            if element.amount > 0:
-                income += element.amount
-            else:
-                expenses += element.amount
-    return mapped_data, income, expenses, from_date_str, to_date_str
+            if element.operation_original_date:
+                if not from_date or element.operation_original_date < from_date:
+                    from_date = element.operation_original_date
+                    from_date_str = from_date.isoformat()
+                if not to_date or element.operation_original_date > to_date:
+                    to_date = element.operation_original_date
+                    to_date_str = to_date.isoformat()
+    return mapped_data, from_date_str, to_date_str
