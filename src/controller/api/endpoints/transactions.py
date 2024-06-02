@@ -18,6 +18,7 @@ from src.controller.api.schemas.transactions.transactions import (
     DetailTransaction,
     FullDetailTransaction,
     GetListTransactions,
+    GetListTransactionsDownload,
     OrderBy,
     OrderDirection,
 )
@@ -40,7 +41,7 @@ PaginationDeps = Annotated[tuple[int | None, int | None], Depends(req_pagination
 
 
 @router.post(
-    "/v1/transactions/",
+    "/v1/import/xls",
     responses={
         201: {"description": "Created."},
         400: {"model": ErrorMessage, "description": "Bad Request."},
@@ -52,11 +53,11 @@ PaginationDeps = Annotated[tuple[int | None, int | None], Depends(req_pagination
         503: {"model": ErrorMessage, "description": "Service Unavailable."},
         504: {"model": ErrorMessage, "description": "Gateway Timeout."},
     },
-    tags=["Transactions"],
+    tags=["Import/Export Transactions"],
     summary="Uploads .xls file with transactions from Santander Bank.",
     response_class=Response,
 )
-async def post_transactions_file(
+async def import_xls_transactions_file(
     file: Annotated[UploadFile, File(description="File with transactions.")],
     http_request_info: CommonDeps,
     db_connection: Annotated[Session, Depends(get_db_session)],
@@ -75,17 +76,117 @@ async def post_transactions_file(
         account_number,
         succesful_transactions,
         already_exist_transactions,
-    ) = await TransactionService.post_transactions_file(db_connection=db_connection, file=file)
+    ) = await TransactionService.post_transactions_file_xls(db_connection=db_connection, file=file)
     data = {
         "account_number": account_number,
         "succesful_transactions": succesful_transactions,
         "already_exist_transactions": already_exist_transactions,
     }
-    http_request_info["location-id"] = account_number
     logger.info("Exiting (duration: %ss)...", time.time() - start_time)
     return JSONResponse(
         content=data,
         status_code=status.HTTP_201_CREATED,
+        headers=http_request_info,
+    )
+
+
+@router.post(
+    "/v1/import/json",
+    responses={
+        201: {"description": "Created."},
+        400: {"model": ErrorMessage, "description": "Bad Request."},
+        401: {"model": ErrorMessage, "description": "Unauthorized."},
+        403: {"model": ErrorMessage, "description": "Forbidden."},
+        422: {"model": ErrorMessage, "description": "Unprocessable Entity."},
+        500: {"model": ErrorMessage, "description": "Internal Server Error."},
+        502: {"model": ErrorMessage, "description": "Bad Gateway."},
+        503: {"model": ErrorMessage, "description": "Service Unavailable."},
+        504: {"model": ErrorMessage, "description": "Gateway Timeout."},
+    },
+    tags=["Import/Export Transactions"],
+    summary="Uploads .xls file with transactions from Santander Bank.",
+    response_class=Response,
+)
+async def import_json_transactions_file(
+    file: Annotated[UploadFile, File(description="File with transactions.")],
+    http_request_info: CommonDeps,
+    db_connection: Annotated[Session, Depends(get_db_session)],
+) -> Response:
+    """Endpoint to post the create transactions from a file."""
+    logger.info("Entering...")
+    start_time = time.time()
+    # Check file content-type is XLS
+    if file.content_type != "application/json":
+        error_msg = (
+            "Invalid file content-type. "  # noqa: ISC003
+            + "Please use application/json content-type files."
+        )
+        raise HTTP400BadRequestError(error_msg)
+    (
+        account_number,
+        succesful_transactions,
+        already_exist_transactions,
+    ) = await TransactionService.post_transactions_file_json(db_connection=db_connection, file=file)
+    data = {
+        "account_number": account_number,
+        "succesful_transactions": succesful_transactions,
+        "already_exist_transactions": already_exist_transactions,
+    }
+    logger.info("Exiting (duration: %ss)...", time.time() - start_time)
+    return JSONResponse(
+        content=data,
+        status_code=status.HTTP_201_CREATED,
+        headers=http_request_info,
+    )
+
+
+@router.get(
+    "/v1/export/{account_number}",
+    responses={
+        200: {"model": GetListTransactionsDownload, "description": "OK."},
+        400: {"model": ErrorMessage, "description": "Bad Request."},
+        401: {"model": ErrorMessage, "description": "Unauthorized."},
+        403: {"model": ErrorMessage, "description": "Forbidden."},
+        422: {"model": ErrorMessage, "description": "Unprocessable Entity."},
+        500: {"model": ErrorMessage, "description": "Internal Server Error."},
+        502: {"model": ErrorMessage, "description": "Bad Gateway."},
+        503: {"model": ErrorMessage, "description": "Service Unavailable."},
+        504: {"model": ErrorMessage, "description": "Gateway Timeout."},
+    },
+    tags=["Import/Export Transactions"],
+    summary="Download list of transactions.",
+    response_model_by_alias=True,
+    response_model=GetListTransactionsDownload,
+)
+async def export_json_transactions_file(
+    account_number: Annotated[str, Path(description="Account Number", max_length=34)],
+    filters: FiltersDeps,
+    http_request_info: CommonDeps,
+    db_connection: Annotated[Session, Depends(get_db_session)],
+) -> JSONResponse:
+    """List of transactions."""
+    logger.info("Entering...")
+    start_time = time.time()
+    logger.debug("Filters: %s", filters[0])
+
+    transactions, account_holder = TransactionService.download_transactions_list(
+        db_connection=db_connection,
+        account_number=account_number,
+        filters=filters[0],
+        order_by=filters[1],
+        order_direction=filters[2],
+    )
+
+    output = GetListTransactionsDownload(
+        account_number=account_number,
+        account_holder=account_holder,
+        transactions=transactions,
+    )
+    response_data = jsonable_encoder(output.model_dump())
+    logger.info("Exiting (duration: %ss)...", time.time() - start_time)
+    return JSONResponse(
+        content=response_data,
+        status_code=status.HTTP_200_OK,
         headers=http_request_info,
     )
 

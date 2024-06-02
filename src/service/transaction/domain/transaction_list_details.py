@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def transaction_list_details(
+def transaction_list_details_with_dates(
     db_data: list[Transaction | None],
 ) -> tuple[list[FullDetailTransaction], str, str]:
     """Extracts the transaction details from the database data.
@@ -40,3 +40,17 @@ def transaction_list_details(
                     to_date = element.operation_original_date
                     to_date_str = to_date.isoformat()
     return mapped_data, from_date_str, to_date_str
+
+
+def transaction_list_details(
+    db_data: list[Transaction | None],
+) -> tuple[list[FullDetailTransaction]]:
+    """Extracts the transaction details from the database data.
+
+    Args:
+        db_data (list[Transaction]): The list of transactions from the database.
+
+    Returns:
+        tuple[list[FullDetailTransaction]]: The list of transactions.
+    """
+    return [map_api_transaction_from_db(element) for element in db_data if element]
