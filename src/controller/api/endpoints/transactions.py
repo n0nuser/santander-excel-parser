@@ -1,6 +1,7 @@
 """Module with the endpoints for the transaction entity."""
 
 import logging
+import time
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, File, Path, Request, UploadFile, status
@@ -62,6 +63,7 @@ async def post_transactions_file(
 ) -> Response:
     """Endpoint to post the create transactions from a file."""
     logger.info("Entering...")
+    start_time = time.time()
     # Check file content-type is XLS
     if file.content_type != "application/vnd.ms-excel":
         error_msg = (
@@ -80,7 +82,7 @@ async def post_transactions_file(
         "already_exist_transactions": already_exist_transactions,
     }
     http_request_info["location-id"] = account_number
-    logger.info("Exiting...")
+    logger.info("Exiting (duration: %ss)...", time.time() - start_time)
     return JSONResponse(
         content=data,
         status_code=status.HTTP_201_CREATED,
@@ -116,6 +118,7 @@ async def get_transactions(
 ) -> JSONResponse:
     """List of transactions."""
     logger.info("Entering...")
+    start_time = time.time()
     logger.debug("Filters: %s", filters[0])
 
     limit = pagination[0]
@@ -151,7 +154,7 @@ async def get_transactions(
         pagination=api_pagination,
     )
     response_data = jsonable_encoder(output.model_dump())
-    logger.info("Exiting...")
+    logger.info("Exiting (duration: %ss)...", time.time() - start_time)
     return JSONResponse(
         content=response_data,
         status_code=status.HTTP_200_OK,
@@ -187,12 +190,13 @@ async def get_transaction_id(
 ) -> JSONResponse:
     """Retrieve the information of the transaction with the matching code."""
     logger.info("Entering...")
+    start_time = time.time()
     output = TransactionService.get_transaction_id(
         db_connection=db_connection, transaction_id=transaction_id, account_number=account_number
     )
 
     response_data = jsonable_encoder(output.model_dump())
-    logger.info("Exiting...")
+    logger.info("Exiting (duration: %ss)...", time.time() - start_time)
     return JSONResponse(
         content=response_data,
         status_code=status.HTTP_200_OK,
@@ -225,6 +229,7 @@ async def post_transaction(
 ) -> Response:
     """Endpoint to create a transaction."""
     logger.info("Entering...")
+    start_time = time.time()
     transaction_id: UUID4 = TransactionService.post_transaction(
         db_connection=db_connection,
         data=body,
@@ -232,7 +237,7 @@ async def post_transaction(
     )
 
     http_request_info["location-id"] = str(transaction_id)
-    logger.info("Exiting...")
+    logger.info("Exiting (duration: %ss)...", time.time() - start_time)
     return Response(status_code=status.HTTP_201_CREATED, headers=http_request_info)
 
 
@@ -262,13 +267,14 @@ async def put_transaction(
 ) -> Response:
     """Update the information of the transaction with the matching Id."""
     logger.info("Entering...")
+    start_time = time.time()
     TransactionService.put_transaction(
         db_connection=db_connection,
         transaction_id=transaction_id,
         account_number=account_number,
         data=body,
     )
-    logger.info("Exiting...")
+    logger.info("Exiting (duration: %ss)...", time.time() - start_time)
     return Response(status_code=status.HTTP_204_NO_CONTENT, headers=http_request_info)
 
 
@@ -297,8 +303,9 @@ async def delete_transaction_id(
 ) -> Response:
     """Delete the information of the transaction with the matching Id."""
     logger.info("Entering...")
+    start_time = time.time()
     TransactionService.delete_transaction(
         db_connection=db_connection, transaction_id=transaction_id, account_number=account_number
     )
-    logger.info("Exiting...")
+    logger.info("Exiting (duration: %ss)...", time.time() - start_time)
     return Response(status_code=status.HTTP_204_NO_CONTENT, headers=http_request_info)
