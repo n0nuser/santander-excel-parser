@@ -164,9 +164,9 @@ class TransactionService:
             TransactionServiceError: If an error occurs while retrieving the transactions.
 
         Returns:
-            tuple[list[FullDetailTransaction | list[None], int, float, float, float, str, str]:
-                A tuple containing the list of transactions, the total count, the income,
-                the expenses, the balance, the date first data date and the last data date.
+            tuple[list[FullDetailTransaction | list[None], int, str, str]:
+                A tuple containing the list of transactions, the total count,
+                the date first data date and the last data date.
         """
         logger.info("Entering...")
         try:
@@ -189,9 +189,7 @@ class TransactionService:
             from_date_str = to_date_str = ""
             if db_data:
                 # Fill the variables with the data
-                mapped_data, income, expenses, from_date_str, to_date_str = (
-                    transaction_list_details(db_data)
-                )
+                mapped_data, from_date_str, to_date_str = transaction_list_details(db_data)
                 if statistics:
                     transactions_df = map_dataframe_from_db(db_data)
                     statistics_data = calculate_statistics(transactions_df=transactions_df)
@@ -201,7 +199,7 @@ class TransactionService:
             logger.debug("Total response count: '%s'", db_count)
         except ElementNotFoundError:
             logger.exception("No transactions found with these parameters")
-            return [], 0, 0.0, 0.0, 0.0, "", "", None
+            return [], 0, "", "", None
         except Exception as error:
             logger.exception("An error occurred while retrieving the transactions.")
             raise TransactionServiceError from error
