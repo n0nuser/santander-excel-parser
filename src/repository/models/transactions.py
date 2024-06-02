@@ -26,6 +26,9 @@ class Account(BaseTimestamps):
     def __str__(self) -> str:
         return f"{self.account_number} - {self.account_holder}"
 
+    def __repr__(self) -> str:
+        return f"{self.account_number} - {self.account_holder}"
+
 
 class Transaction(BaseTimestamps):
     """Represents a transaction entity in the database."""
@@ -53,4 +56,7 @@ class Transaction(BaseTimestamps):
     )
 
     def __str__(self) -> str:
+        return f"{self.id}"
+
+    def __repr__(self) -> str:
         return f"{self.id}"
