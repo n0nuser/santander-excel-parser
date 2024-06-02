@@ -16,6 +16,14 @@ class TransactionModel(BaseModel):
     balance: float
 
 
+class TransactionStatistics(BaseModel):
+    """Model to define the statistics of transactions."""
+
+    concept: str
+    num_transactions: int
+    total_balance: float
+
+
 class BasicStatistics(BaseModel):
     """Model to define the basic statistics of transactions."""
 
@@ -24,7 +32,7 @@ class BasicStatistics(BaseModel):
     total_withdrawn: float
     total_balance: float
     average_transaction_amount: float
-    transactions_per_concept: dict[str, int]
+    transactions_per_concept: list[TransactionStatistics]
 
 
 class TimeBasedAnalysis(BaseModel):
