@@ -14,9 +14,6 @@ from src.repository.crud.base import Filter
 
 
 def req_transaction_filters(
-    stastistics: Annotated[  # noqa: FBT002
-        bool, Query(description="Flag to indicate if the statistics should be calculated.")
-    ] = False,
     concept: Annotated[
         str | None,
         Query(
@@ -119,4 +116,4 @@ def req_transaction_filters(
     if operation_end_range_date:
         field = "operation_original_date"
         transaction_filters.append(check_date_format(operation_end_range_date, "lte", field))
-    return stastistics, transaction_filters, order_by, order_direction
+    return transaction_filters, order_by, order_direction
