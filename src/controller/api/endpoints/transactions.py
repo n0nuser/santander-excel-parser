@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, File, Path, Request, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, Path, Query, Request, UploadFile, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, Response
 from pydantic import UUID4
@@ -115,6 +115,9 @@ async def get_transactions(
     http_request_info: CommonDeps,
     request: Request,
     db_connection: Annotated[Session, Depends(get_db_session)],
+    statistics: Annotated[  # noqa: FBT002
+        bool, Query(description="Flag to indicate if the statistics should be calculated.")
+    ] = False,
 ) -> JSONResponse:
     """List of transactions."""
     logger.info("Entering...")
@@ -128,10 +131,10 @@ async def get_transactions(
         account_number=account_number,
         limit=limit,
         offset=offset,
-        statistics=filters[0],
-        filters=filters[1],
-        order_by=filters[2],
-        order_direction=filters[3],
+        statistics=statistics,
+        filters=filters[0],
+        order_by=filters[1],
+        order_direction=filters[2],
     )
 
     base_url = f"{request.url.scheme}://{request.url.netloc}"
