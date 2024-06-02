@@ -61,6 +61,18 @@ class GetListTransactions(BaseModel):
     pagination: Pagination | None = Field(default=None)
 
 
+class GetListTransactionsDownload(BaseModel):
+    """Model to define the list of transactions. Used for GET List Transactions.
+
+    data (list[GetRulesList]): Data containing the transactions [Optional].
+    pagination (Pagination): Pagination for the data [Optional].
+    """
+
+    account_number: str
+    account_holder: str
+    transactions: list[DetailTransaction] | list[None] = Field(default=[])
+
+
 def validate_transaction_input(
     amount: int | None,
     amount_start_range: int | None,

@@ -6,13 +6,14 @@ from uuid import UUID
 
 import pytz
 from fastapi import UploadFile
-from pydantic import UUID4
+from pydantic import UUID4, ValidationError
 from sqlalchemy.orm import Session
 
 from src.controller.api.schemas.transactions.statistics import BankTransactionStatistics
 from src.controller.api.schemas.transactions.transactions import (
     DetailTransaction,
     FullDetailTransaction,
+    GetListTransactionsDownload,
     OrderBy,
     OrderDirection,
 )
@@ -23,7 +24,10 @@ from src.repository.models.transactions import Account, Transaction
 from src.service.exceptions import TransactionServiceError
 from src.service.transaction.domain.calculate_statistics import calculate_statistics
 from src.service.transaction.domain.extract_from_xls import extract_from_xls
-from src.service.transaction.domain.transaction_list_details import transaction_list_details
+from src.service.transaction.domain.transaction_list_details import (
+    transaction_list_details,
+    transaction_list_details_with_dates,
+)
 from src.service.transaction.mapper import (
     map_api_transaction_from_db,
     map_dataframe_from_db,
@@ -37,7 +41,7 @@ class TransactionService:
     """Defines the application service for the transaction domain."""
 
     @staticmethod
-    async def post_transactions_file(
+    async def post_transactions_file_xls(
         db_connection: Session, file: UploadFile
     ) -> tuple[str, int, int]:
         """Function to upload transactions to the database from a file.
@@ -58,7 +62,7 @@ class TransactionService:
         contents = await file.read()
 
         # Read Excel file with Pandas
-        account_number, account_holder, balance, transactions_data = extract_from_xls(contents)
+        account_number, account_holder, transactions_data = extract_from_xls(contents)
 
         try:
             account = account_crud.get_one_by_field(
@@ -70,7 +74,6 @@ class TransactionService:
             account = Account(
                 account_number=account_number,
                 account_holder=account_holder,
-                balance=balance,
             )
             account_crud.create(db=db_connection, data=account)
             logger.info("Account '%s' created in the database.", account.account_number)
@@ -132,10 +135,113 @@ class TransactionService:
         return account.account_number, succesful_transactions, already_exists_transactions
 
     @staticmethod
+    async def post_transactions_file_json(
+        db_connection: Session, file: UploadFile
+    ) -> tuple[str, int, int]:
+        """Function to upload transactions to the database from a file.
+
+        Args:
+            db_connection (Session): database connection.
+            file (UploadFile): file containing the transactions.
+
+        Raises:
+            TransactionServiceError: If an error occurs while creating the transactions.
+
+        Returns:
+            tuple[str, int, int]: account number, number of successful transactions
+                and number of transactions that already exist in the database.
+        """
+        logger.info("Entering...")
+        # Read the file contents
+        contents = await file.read()
+        try:
+            model_data = GetListTransactionsDownload.model_validate_json(contents)
+        except ValidationError as error:
+            error_msg = f"The JSON file does not have the correct format. Error: {error}"
+            logger.exception(error_msg)
+            raise TransactionServiceError(error_msg) from error
+
+        try:
+            account = account_crud.get_one_by_field(
+                db=db_connection, field="account_number", value=model_data.account_number
+            )
+            logger.info("Account '%s' already exists in the database.", account.account_number)
+        except ElementNotFoundError:
+            # Create the Account object
+            account = Account(
+                account_number=model_data.account_number,
+                account_holder=model_data.account_holder,
+            )
+            account_crud.create(db=db_connection, data=account)
+            logger.info("Account '%s' created in the database.", account.account_number)
+
+        succesful_transactions = 0
+        already_exists_transactions = 0
+        for transaction in model_data.transactions:
+            cet = pytz.timezone("CET")
+            date_format = "%Y-%m-%d"
+            operation_original_date = (
+                datetime.strptime(transaction.operation_original_date, date_format)
+                .replace(tzinfo=cet)
+                .date()
+            )
+            operation_effective_date = (
+                datetime.strptime(transaction.operation_effective_date, date_format)
+                .replace(tzinfo=cet)
+                .date()
+            )
+            concept = transaction.concept
+            amount = float(transaction.amount)
+            balance = float(transaction.balance)
+            try:
+                db_transaction = transaction_crud.get_one_by_fields(
+                    db=db_connection,
+                    filters=[
+                        Filter(
+                            field="operation_original_date",
+                            operator="eq",
+                            value=str(operation_original_date),
+                        ),
+                        Filter(
+                            field="operation_effective_date",
+                            operator="eq",
+                            value=str(operation_effective_date),
+                        ),
+                        Filter(field="concept", operator="eq", value=concept),
+                        Filter(field="amount", operator="eq", value=amount),
+                        Filter(field="balance", operator="eq", value=balance),
+                    ],
+                )
+                logger.debug("Transaction already exists: '%s'", db_transaction)
+                already_exists_transactions += 1
+            except ElementNotFoundError:
+                db_transaction = Transaction(
+                    operation_original_date=operation_original_date,
+                    operation_effective_date=operation_effective_date,
+                    concept=concept,
+                    amount=amount,
+                    balance=balance,
+                    account_id=account.id,
+                )
+                logger.debug("Transaction: '%s'", db_transaction)
+                try:
+                    transaction_crud.create(db=db_connection, data=db_transaction)
+                    succesful_transactions += 1
+                except Exception as error:
+                    error_msg = (
+                        f"An error occurred while creating the transaction '{db_transaction}'"
+                    )
+                    logger.exception(error_msg)
+                    raise TransactionServiceError(error_msg) from error
+
+        logger.info("Exiting...")
+        return account.account_number, succesful_transactions, already_exists_transactions
+
+    @staticmethod
     def get_transactions_list(
         db_connection: Session,
         account_number: str,
-        statistics: bool,
+        statistics: bool,  # noqa: FBT001
         order_by: OrderBy,
         order_direction: OrderDirection,
         filters: list[Filter],
@@ -189,7 +295,9 @@ class TransactionService:
             from_date_str = to_date_str = ""
             if db_data:
                 # Fill the variables with the data
-                mapped_data, from_date_str, to_date_str = transaction_list_details(db_data)
+                mapped_data, from_date_str, to_date_str = transaction_list_details_with_dates(
+                    db_data
+                )
                 if statistics:
                     transactions_df = map_dataframe_from_db(db_data)
                     statistics_data = calculate_statistics(transactions_df=transactions_df)
@@ -211,6 +319,63 @@ class TransactionService:
                 to_date_str,
                 statistics_data,
             )
+        finally:
+            logger.info("Exiting...")
+
+    @staticmethod
+    def download_transactions_list(
+        db_connection: Session,
+        account_number: str,
+        order_by: OrderBy,
+        order_direction: OrderDirection,
+        filters: list[Filter],
+    ) -> tuple[list[DetailTransaction] | list[None], str]:
+        """Retrieves a list of transactions from the database.
+
+        Args:
+            db_connection (Session): database connection.
+            account_number (str): account number.
+            order_by (OrderBy): field to order the results by.
+            order_direction (OrderDirection): direction to order the results by.
+            filters (list[Filter]): list of filters to apply to the query.
+
+        Raises:
+            TransactionServiceError: If an error occurs while retrieving the transactions.
+
+        Returns:
+            tuple[list[FullDetailTransaction | list[None], str]:
+                A tuple containing the list of transactions and the account holder.
+        """
+        logger.info("Entering...")
+        try:
+            account = account_crud.get_one_by_field(
+                db=db_connection, field="account_number", value=account_number
+            )
+            db_data = transaction_crud.get_list(
+                db=db_connection,
+                filters=filters,
+                order_by=order_by.name.lower(),
+                order_direction=order_direction.value,
+            )
+            logger.debug("Data retrieved: '%s'", db_data)
+
+            # Initialize variables
+            mapped_data = []
+            if db_data:
+                # Fill the variables with the data
+                mapped_data = transaction_list_details(db_data)
+
+            logger.debug("Response data: '%s'", mapped_data)
+            db_count = transaction_crud.count(db=db_connection, filters=filters)
+            logger.debug("Total response count: '%s'", db_count)
+        except ElementNotFoundError:
+            logger.exception("No transactions found with these parameters")
+            return [], ""
+        except Exception as error:
+            logger.exception("An error occurred while retrieving the transactions.")
+            raise TransactionServiceError from error
+        else:
+            return mapped_data, account.account_holder
         finally:
             logger.info("Exiting...")
 

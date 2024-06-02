@@ -5,7 +5,7 @@ for managing transactions and their associated data.
 
 from datetime import date
 
-from sqlalchemy import UUID, Date, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import UUID, Date, Float, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.repository.models.base import BaseTimestamps
@@ -16,7 +16,6 @@ class Account(BaseTimestamps):
 
     account_number: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     account_holder: Mapped[str] = mapped_column(String, nullable=False)
-    balance: Mapped[float] = mapped_column(Integer, nullable=False)
     transactions: Mapped[list["Transaction"]] = relationship(
         back_populates="account",
         cascade="all, delete-orphan",
