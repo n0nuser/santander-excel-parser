@@ -35,11 +35,19 @@ class BasicStatistics(BaseModel):
     transactions_per_concept: list[TransactionStatistics]
 
 
+class TimeBasedAnalysisDate(BaseModel):
+    """Model to define the time-based analysis of transactions."""
+
+    date: str  # Using period 'YYYY-MM' or 'YYYY-MM-DD'
+    num_transactions: int
+    total_balance: float
+
+
 class TimeBasedAnalysis(BaseModel):
     """Model to define the time-based analysis of transactions."""
 
-    daily_transactions: dict[date, int]
-    monthly_transactions: dict[str, int]  # Using period 'YYYY-MM'
+    daily_transactions: list[TimeBasedAnalysisDate]
+    monthly_transactions: list[TimeBasedAnalysisDate]
 
 
 class AccountBasedAnalysis(BaseModel):
