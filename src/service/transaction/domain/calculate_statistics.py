@@ -1,3 +1,5 @@
+"""Module to calculate statistics from a DataFrame of transactions."""
+
 import pandas as pd
 from pandas import DataFrame
 
@@ -7,6 +9,7 @@ from src.controller.api.schemas.transactions.statistics import (
     BankTransactionStatistics,
     BasicStatistics,
     TimeBasedAnalysis,
+    TimeBasedAnalysisDate,
     TransactionModel,
     TransactionStatistics,
 )
@@ -85,18 +88,41 @@ def time_based_analysis(transactions_df: DataFrame) -> TimeBasedAnalysis:
     transactions_df["operation_effective_date"] = pd.to_datetime(
         transactions_df["operation_effective_date"]
     )
-    daily_transactions = (
-        transactions_df.groupby(transactions_df["operation_original_date"].dt.date).size().to_dict()
+    daily_transactions_df = (
+        transactions_df.groupby(transactions_df["operation_original_date"].dt.date)
+        .agg(num_transactions=("amount", "size"), total_balance=("amount", "sum"))
+        .reset_index()
     )
-    monthly_transactions = (
+    daily_transactions_dict = daily_transactions_df.set_index("operation_original_date").T.to_dict()
+    daily_transactions_model = [
+        TimeBasedAnalysisDate(
+            date=str(key),
+            num_transactions=value.get("num_transactions"),
+            total_balance=value.get("total_balance"),
+        )
+        for key, value in daily_transactions_dict.items()
+    ]
+
+    monthly_transactions_df = (
         transactions_df.groupby(transactions_df["operation_original_date"].dt.to_period("M"))
-        .size()
-        .to_dict()
+        .agg(num_transactions=("amount", "size"), total_balance=("amount", "sum"))
+        .reset_index()
     )
+    monthly_transactions_dict = monthly_transactions_df.set_index(
+        "operation_original_date"
+    ).T.to_dict()
+    montly_transactions_model = [
+        TimeBasedAnalysisDate(
+            date=str(key),
+            num_transactions=value.get("num_transactions"),
+            total_balance=value.get("total_balance"),
+        )
+        for key, value in monthly_transactions_dict.items()
+    ]
 
     return TimeBasedAnalysis(
-        daily_transactions=daily_transactions,
-        monthly_transactions={str(k): v for k, v in monthly_transactions.items()},
+        daily_transactions=daily_transactions_model,
+        monthly_transactions=montly_transactions_model,
     )
 
 
