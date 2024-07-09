@@ -100,8 +100,8 @@ def validate_transaction_input(
     if amount and (amount_start_range or amount_end_range):
         error_msg = "You can't use amount and amount range at the same time."
         raise HTTP400BadRequestError(error_msg)
-    if (amount_start_range and not amount_end_range) or (
-        not amount_start_range and amount_end_range
+    if (amount_start_range and amount_end_range is None) or (
+        amount_start_range is None and amount_end_range
     ):
         error_msg = "You must use both amount range fields."
         raise HTTP400BadRequestError(error_msg)
@@ -109,8 +109,8 @@ def validate_transaction_input(
     if operation_date and (operation_start_range_date or operation_end_range_date):
         error_msg = "You can't use operation date and operation date range at the same time."
         raise HTTP400BadRequestError(error_msg)
-    if (operation_start_range_date and not operation_end_range_date) or (
-        not operation_start_range_date and operation_end_range_date
+    if (operation_start_range_date and operation_end_range_date is None) or (
+        operation_start_range_date is None and operation_end_range_date
     ):
         error_msg = "You must use both operation date range fields."
         raise HTTP400BadRequestError(error_msg)
