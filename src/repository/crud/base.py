@@ -64,8 +64,8 @@ class CRUDBase(Generic[ModelType]):
         operators: dict[str, Callable[[any], SQLQuery]] = {
             "eq": lambda f: f == value,
             "neq": lambda f: f != value,
-            "contains": lambda f: f.contains(value),
-            "not_contains": lambda f: ~f.contains(value),
+            "contains": lambda f: f.icontains(value),
+            "not_contains": lambda f: ~f.icontains(value),
             "gt": lambda f: f > value,
             "gte": lambda f: f >= value,
             "lt": lambda f: f < value,
