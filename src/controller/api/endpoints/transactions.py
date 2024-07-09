@@ -104,7 +104,7 @@ async def import_xls_transactions_file(
         504: {"model": ErrorMessage, "description": "Gateway Timeout."},
     },
     tags=["Import/Export Transactions"],
-    summary="Uploads .xls file with transactions from Santander Bank.",
+    summary="Uploads .json file with transactions that were exported from this app.",
     response_class=Response,
 )
 async def import_json_transactions_file(
@@ -311,7 +311,7 @@ async def get_transaction_id(
 @router.post(
     "/v1/accounts/{account_number}/transactions",
     responses={
-        200: {"description": "OK."},
+        201: {"description": "Created."},
         400: {"model": ErrorMessage, "description": "Bad Request."},
         401: {"model": ErrorMessage, "description": "Unauthorized."},
         403: {"model": ErrorMessage, "description": "Forbidden."},
@@ -348,7 +348,7 @@ async def post_transaction(
 @router.put(
     "/v1/accounts/{account_number}/transactions/{transaction_id}",
     responses={
-        200: {"description": "OK."},
+        204: {"description": "No Content."},
         400: {"model": ErrorMessage, "description": "Bad Request."},
         401: {"model": ErrorMessage, "description": "Unauthorized."},
         403: {"model": ErrorMessage, "description": "Forbidden."},
