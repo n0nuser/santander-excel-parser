@@ -23,6 +23,7 @@ from sqlalchemy.exc import IntegrityError, NoResultFound, OperationalError, Prog
 from src.controller.errors import exceptions
 from src.controller.errors.error_responses import ERROR_RESPONSES
 from src.repository.exceptions import ElementNotFoundError
+from src.service.exceptions import TransactionServiceError
 
 logger = logging.getLogger(__name__)
 
@@ -181,6 +182,7 @@ def manage_api_exceptions(app: FastAPI) -> None:  # noqa: C901
     @app.exception_handler(AttributeError)
     @app.exception_handler(ValueError)
     @app.exception_handler(exceptions.HTTP500InternalServerError)
+    @app.exception_handler(TransactionServiceError)
     @app.exception_handler(OperationalError)
     @app.exception_handler(ProgrammingError)
     @app.exception_handler(IntegrityError)
